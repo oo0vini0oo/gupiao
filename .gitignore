@@ -22,6 +22,7 @@ __pycache__/
 
 # Temporary
 .DS_Store
+.claude/
 
 # Non-stock-analysis files (excluded from git)
 CLAUDE.md
