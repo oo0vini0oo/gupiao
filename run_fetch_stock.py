@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Launcher for stock fetcher - ASCII path wrapper for Task Scheduler"""
+"""Launcher for stock fetcher - Task Scheduler wrapper"""
 import os
 import sys
 
-# Change to the stock analysis directory (Unicode path)
-stock_dir = os.path.join(os.path.dirname(__file__), "股票分析")
-os.chdir(stock_dir)
-sys.path.insert(0, stock_dir)
+os.chdir(os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(__file__))
 
 from main import main
 main()

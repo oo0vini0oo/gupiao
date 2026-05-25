@@ -1,27 +1,9 @@
-# Bytecode
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Images
-*.png
-*.jpg
-*.jpeg
-*.gif
-
-# Data files
-*.xlsx
-*.json
-
-# Logs
 *.log
-
-# IDE
 .idea/
 .vscode/
-
-# Temporary
-.DS_Store
 .claude/
 
 # Non-stock-analysis files (excluded from git)
