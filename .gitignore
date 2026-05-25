@@ -1,0 +1,39 @@
+# Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Data files
+*.xlsx
+*.json
+
+# Logs
+*.log
+
+# IDE
+.idea/
+.vscode/
+
+# Temporary
+.DS_Store
+
+# Non-stock-analysis files (excluded from git)
+CLAUDE.md
+conftest.py
+pomodoro/
+pytest.ini
+pytest_report.html
+run.py
+run_pomodoro_tests.py
+testcases/
+tools/
+export_data.py
+financial_analysis.py
+financial_dashboard.html
+data.json
