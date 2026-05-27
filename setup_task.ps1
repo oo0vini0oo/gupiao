@@ -1,6 +1,6 @@
 $python = 'D:\Program Files\Python12\python.exe'
-$script = 'D:\PycharmProjects\NewAnchorUITest\股票分析\main.py'
-$workDir = 'D:\PycharmProjects\NewAnchorUITest\股票分析'
+$script = 'D:\PycharmProjects\GuPiao\main.py'
+$workDir = 'D:\PycharmProjects\GuPiao'
 
 $action = New-ScheduledTaskAction -Execute $python -Argument $script -WorkingDirectory $workDir
 $trigger = New-ScheduledTaskTrigger -Daily -At '15:05'

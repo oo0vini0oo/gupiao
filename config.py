@@ -17,6 +17,33 @@ DATABASE = "stock_analysis"
 # 新浪财经 API 地址
 SINA_API_URL = "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData"
 
+# ── 板块分类映射 ──────────────────────────────────
+SECTOR_MAP = {
+    "沪市主板":   ("600", "601", "603"),
+    "深市主板":   ("000", "001", "002"),
+    "创业板":     ("300",),
+    "科创板":     ("688",),
+    "北交所":     ("830", "831", "832", "833", "834", "835", "836", "837", "838", "839",
+                   "870", "871", "872", "873", "874", "875", "876", "877", "878", "879",
+                   "880", "881", "882", "883", "884", "885", "886", "887", "888", "889"),
+}
+
+# ── 新闻抓取源 ────────────────────────────────────
+NEWS_SOURCES = {
+    "eastmoney": {
+        "url": "https://finance.eastmoney.com/a/czqyw.html",
+        "name": "东方财富",
+    },
+    "sina": {
+        "url": "https://feed.mix.sina.com.cn/api/roll/get?pageid=153&lid=2509&k=&num=20&page=1",
+        "name": "新浪财经",
+    },
+    "xinwenlianbo": {
+        "url": "https://cn.govopendata.com/xinwenlianbo/",
+        "name": "新闻联播",
+    },
+}
+
 # User-Agent 列表（反爬轮换）
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",

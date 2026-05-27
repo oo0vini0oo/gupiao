@@ -42,6 +42,34 @@ CREATE TABLE IF NOT EXISTS stock_list (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='A股股票列表';
 """
 
+CREATE_PREDICTIONS_SQL = """
+CREATE TABLE IF NOT EXISTS stock_predictions (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    stock_code      VARCHAR(10)   NOT NULL COMMENT '股票代码',
+    predict_date    DATE          NOT NULL COMMENT '预测日期',
+    target_date     DATE          NOT NULL COMMENT '预测目标日期',
+    predicted_price DECIMAL(10,3) COMMENT '预测收盘价',
+    actual_price    DECIMAL(10,3) COMMENT '实际收盘价',
+    error_pct       DECIMAL(10,4) COMMENT '误差百分比',
+    model_version   VARCHAR(20)   DEFAULT 'v1' COMMENT '模型版本',
+    created_at      DATETIME      COMMENT '创建时间',
+    UNIQUE KEY uk_pred (stock_code, predict_date, target_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='股票预测记录';
+"""
+
+CREATE_ACCURACY_SQL = """
+CREATE TABLE IF NOT EXISTS prediction_accuracy (
+    id                 BIGINT AUTO_INCREMENT PRIMARY KEY,
+    check_date         DATE          NOT NULL COMMENT '校验日期',
+    total_predictions  INT           COMMENT '总预测数',
+    correct_predictions INT          COMMENT '正确数（方向准确）',
+    accuracy_pct       DECIMAL(10,4) COMMENT '方向准确率',
+    model_version      VARCHAR(20)   COMMENT '模型版本',
+    created_at         DATETIME      COMMENT '创建时间',
+    UNIQUE KEY uk_check (check_date, model_version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='预测准确率统计';
+"""
+
 
 def _get_connection(with_db: bool = True) -> pymysql.Connection:
     """获取 MySQL 连接"""
@@ -67,14 +95,16 @@ def init_tables():
     finally:
         conn.close()
 
-    # 创建两张表
+    # 创建所有表
     conn = _get_connection(with_db=True)
     try:
         with conn.cursor() as cur:
             cur.execute(CREATE_STOCK_DAILY_SQL)
             cur.execute(CREATE_STOCK_LIST_SQL)
+            cur.execute(CREATE_PREDICTIONS_SQL)
+            cur.execute(CREATE_ACCURACY_SQL)
         conn.commit()
-        print("    stock_daily / stock_list 已就绪")
+        print("    stock_daily / stock_list / stock_predictions / prediction_accuracy 已就绪")
     finally:
         conn.close()
 
@@ -110,14 +140,15 @@ def query_stock_history(stock_code: str, limit: int = 100) -> list:
         conn.close()
 
 
-def query_latest_by_field(field: str, n: int = 10) -> list:
+def query_latest_by_field(field: str, n: int = 10, asc: bool = False) -> list:
     """按某字段排序查询最新一天各股票的数据"""
     extra_field = "" if field == "latest_price" else f", d.latest_price"
+    direction = "ASC" if asc else "DESC"
     sql = f"""
         SELECT d.trade_date, d.stock_code, d.stock_name, d.{field}{extra_field}
         FROM (SELECT trade_date FROM stock_daily ORDER BY trade_date DESC LIMIT 1) t
         JOIN stock_daily d ON d.trade_date = t.trade_date
-        ORDER BY CAST({field} AS DECIMAL(20,2)) DESC
+        ORDER BY CAST({field} AS DECIMAL(20,2)) {direction}
         LIMIT {n}
     """
     conn = _get_connection(with_db=True)

@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}新闻热点 - A股分析平台{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h4 class="mb-3">📰 财经新闻与热点分析</h4>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-3">
+        <div class="card">
+            <div class="card-header">😊 市场情绪</div>
+            <div class="card-body text-center" id="sentimentCard">
+                <p>加载中...</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8 mb-3">
+        <div class="card">
+            <div class="card-header">🔥 热点关键词（全源）</div>
+            <div class="card-body"><div id="chartWordCloud" class="chart-container" style="height:400px;"></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12 mb-3">
+        <div class="card">
+            <div class="card-header" style="border-left:4px solid #c0392b;">📺 新闻联播 · 要闻摘要</div>
+            <div class="card-body">
+                <div id="xwlbList" class="list-group">加载中...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">📰 财经新闻</div>
+            <div class="card-body">
+                <div id="newsList" class="list-group">加载中...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function loadNews() {
+    fetch('/api/news')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.success) {
+                document.getElementById('sentimentCard').innerHTML = '<p class="text-danger">获取失败</p>';
+                document.getElementById('newsList').innerHTML = '<p class="text-danger">获取失败</p>';
+                return;
+            }
+            const d = res.data;
+
+            // 情感分析
+            const s = d.sentiment;
+            const emoji = s.label === '积极' ? '😊' : (s.label === '消极' ? '😟' : '😐');
+            const color = s.label === '积极' ? 'up' : (s.label === '消极' ? 'down' : '');
+            document.getElementById('sentimentCard').innerHTML = `
+                <div style="font-size:4rem;">${emoji}</div>
+                <div class="fs-4 fw-bold ${color}">${s.label}</div>
+                <div class="text-muted">情感评分: ${s.avg_sentiment}</div>
+                <hr>
+                <div class="row">
+                    <div class="col-4"><span class="up">${s.positive}</span><br><small>积极</small></div>
+                    <div class="col-4"><span class="">${s.neutral}</span><br><small>中性</small></div>
+                    <div class="col-4"><span class="down">${s.negative}</span><br><small>消极</small></div>
+                </div>
+                <hr>
+                <div class="text-muted">共分析 ${s.total} 篇新闻<br>（含新闻联播 ${s.xwlb_count || 0} 条）</div>
+            `;
+
+            // 热点词云
+            const topics = d.hot_topics || [];
+            if (topics.length) {
+                const maxWeight = Math.max(...topics.map(t => t.weight));
+                const el = document.getElementById('chartWordCloud');
+                const chart = echarts.init(el);
+                chart.setOption({
+                    tooltip: { formatter: '{b}: {c}' },
+                    series: [{
+                        type: 'wordCloud',
+                        shape: 'circle',
+                        width: '90%',
+                        height: '90%',
+                        sizeRange: [14, 50],
+                        rotationRange: [-30, 30],
+                        gridSize: 8,
+                        drawOutOfBound: false,
+                        layoutAnimation: true,
+                        textStyle: {
+                            color: function () {
+                                const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
+                                return colors[Math.floor(Math.random() * colors.length)];
+                            }
+                        },
+                        data: topics.map(t => ({
+                            name: t.word,
+                            value: t.weight,
+                            textStyle: { fontSize: Math.max(12, 14 + t.weight / maxWeight * 30) }
+                        })),
+                    }]
+                });
+                window.addEventListener('resize', () => chart.resize());
+            } else {
+                document.getElementById('chartWordCloud').innerHTML = '<div class="text-center text-muted p-5">暂无热点数据</div>';
+            }
+
+            // 分离新闻联播和其他新闻
+            const news = d.news || [];
+            const xwlb = news.filter(n => n.source === '新闻联播');
+            const other = news.filter(n => n.source !== '新闻联播');
+
+            // 新闻联播列表
+            document.getElementById('xwlbList').innerHTML = xwlb.length
+                ? xwlb.map(n => `
+                    <a href="${n.url}" target="_blank" class="list-group-item list-group-item-action">
+                        <div class="d-flex justify-content-between">
+                            <span class="fw-medium">${n.title}</span>
+                            <small class="text-muted">${n.time}</small>
+                        </div>
+                    </a>
+                `).join('')
+                : '<p class="text-muted">暂未获取到新闻联播内容</p>';
+
+            // 财经新闻列表
+            document.getElementById('newsList').innerHTML = other.length
+                ? other.map(n => `
+                    <a href="${n.url}" target="_blank" class="list-group-item list-group-item-action">
+                        <div class="d-flex justify-content-between">
+                            <span class="fw-medium">${n.title}</span>
+                            <small class="text-muted">${n.source}</small>
+                        </div>
+                        <small class="text-muted">${n.time}</small>
+                    </a>
+                `).join('')
+                : '<p class="text-muted">暂未抓取到财经新闻</p>';
+        });
+}
+
+loadNews();
+</script>
+{% endblock %}

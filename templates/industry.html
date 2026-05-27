@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}行业分析 - A股分析平台{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h4 class="mb-3">🏭 板块行业分析</h4>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8 mb-3">
+        <div class="card">
+            <div class="card-header">📊 板块涨跌幅排行</div>
+            <div class="card-body"><div id="chartSectorBar" class="chart-container" style="height:400px;"></div></div>
+        </div>
+    </div>
+    <div class="col-lg-4 mb-3">
+        <div class="card">
+            <div class="card-header">🔵 板块市值占比</div>
+            <div class="card-body"><div id="chartSectorPie" class="chart-container" style="height:400px;"></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">🏆 各板块龙头股</div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="leaderTable">
+                        <thead><tr>
+                            <th>板块</th>
+                            <th>股票数</th>
+                            <th>平均涨跌幅</th>
+                            <th>上涨/下跌</th>
+                            <th>龙头股（市值 TOP3）</th>
+                            <th>涨幅 TOP3</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function loadSectors() {
+    fetch('/api/sectors')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.success) return;
+            const data = res.data;
+
+            // 涨跌幅柱状图
+            const barEl = document.getElementById('chartSectorBar');
+            const barChart = echarts.init(barEl);
+            barChart.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                grid: { left: '15%', right: '5%', top: 20, bottom: 30 },
+                xAxis: { type: 'category', data: data.map(d => d.sector), axisLabel: { rotate: 0 } },
+                yAxis: { type: 'value', name: '平均涨跌幅(%)' },
+                series: [{
+                    type: 'bar',
+                    data: data.map(d => ({
+                        value: d.avg_change_pct,
+                        itemStyle: { color: d.avg_change_pct >= 0 ? '#e74c3c' : '#27ae60' }
+                    })),
+                    label: { show: true, position: 'top', formatter: '{c}%' },
+                }]
+            });
+            window.addEventListener('resize', () => barChart.resize());
+
+            // 市值占比饼图
+            const pieEl = document.getElementById('chartSectorPie');
+            const pieChart = echarts.init(pieEl);
+            pieChart.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c}万元 ({d}%)' },
+                series: [{
+                    type: 'pie',
+                    radius: ['30%', '60%'],
+                    data: data.map(d => ({ name: d.sector, value: d.total_market_cap })),
+                    label: { formatter: '{b}\n{d}%' },
+                }]
+            });
+            window.addEventListener('resize', () => pieChart.resize());
+
+            // 表格
+            const tbody = document.querySelector('#leaderTable tbody');
+            tbody.innerHTML = data.map(d => {
+                const leaders = d.leaders.map(l => `<a href="/stock/${l.code}" class="text-decoration-none">${l.code}</a>`).join(', ');
+                const gainers = d.top_gainers.map(g => `<a href="/stock/${g.code}" class="text-decoration-none">${g.code}</a> <span class="up">${g.change_pct}%</span>`).join(', ');
+                const avgClass = d.avg_change_pct >= 0 ? 'up' : 'down';
+                return `<tr>
+                    <td><strong>${d.sector}</strong></td>
+                    <td>${d.count}</td>
+                    <td class="${avgClass}">${d.avg_change_pct}%</td>
+                    <td><span class="up">${d.up_count}</span> / <span class="down">${d.down_count}</span></td>
+                    <td>${leaders}</td>
+                    <td>${gainers}</td>
+                </tr>`;
+            }).join('');
+        });
+}
+
+loadSectors();
+</script>
+{% endblock %}

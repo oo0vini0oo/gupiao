@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} - 个股详情{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h4 class="mb-3">
+            📈 个股详情
+            <span id="stockCode" class="badge bg-secondary">{{ code }}</span>
+            <span id="stockName" class="badge bg-info">加载中...</span>
+        </h4>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8 mb-3">
+        <div class="card">
+            <div class="card-header">📊 历史走势</div>
+            <div class="card-body"><div id="chartTrend" class="chart-container" style="height:400px;"></div></div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card">
+            <div class="card-header">ℹ️ 基本信息</div>
+            <div class="card-body" id="stockInfo">
+                <p>加载中...</p>
+            </div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">🔮 趋势预测</div>
+            <div class="card-body" id="predictInfo">
+                <p>加载中...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12 mb-3">
+        <div class="card">
+            <div class="card-header">📊 成交量</div>
+            <div class="card-body"><div id="chartVolume" class="chart-container" style="height:250px;"></div></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const code = '{{ code }}';
+
+function loadStockDetail() {
+    // 历史数据
+    fetch(`/api/stock/${code}/history`)
+        .then(r => r.json())
+        .then(res => {
+            if (!res.success || !res.data.length) {
+                document.getElementById('stockInfo').innerHTML = '<p class="text-danger">暂无数据</p>';
+                return;
+            }
+            const data = res.data;
+            const latest = data[data.length - 1];
+
+            // 基本信息
+            document.getElementById('stockName').textContent = latest.name || code;
+            document.getElementById('stockInfo').innerHTML = `
+                <div class="mb-2"><strong>代码</strong><br>${latest.code || code}</div>
+                <div class="mb-2"><strong>名称</strong><br>${latest.name || '--'}</div>
+                <div class="mb-2"><strong>最新价</strong><br><span class="fs-4 fw-bold">${latest.price || '--'}</span></div>
+                <div class="mb-2"><strong>涨跌幅</strong><br><span class="${latest.change_pct >= 0 ? 'up' : 'down'} fs-5">${latest.change_pct ? latest.change_pct.toFixed(2) + '%' : '--'}</span></div>
+                <div class="mb-2"><strong>最高</strong><br>${latest.high || '--'}</div>
+                <div class="mb-2"><strong>最低</strong><br>${latest.low || '--'}</div>
+                <div class="mb-2"><strong>成交量</strong><br>${latest.volume ? (latest.volume / 10000).toFixed(0) + '万手' : '--'}</div>
+            `;
+
+            // 价格趋势图（含 MA5, MA10, MA20）
+            const dates = data.map(d => d.date);
+            const prices = data.map(d => d.price);
+
+            function calcMA(data, n) {
+                const result = [];
+                for (let i = 0; i < data.length; i++) {
+                    if (i < n - 1) { result.push(null); continue; }
+                    let sum = 0;
+                    for (let j = i - n + 1; j <= i; j++) sum += data[j];
+                    result.push(+(sum / n).toFixed(2));
+                }
+                return result;
+            }
+
+            const ma5 = calcMA(prices, 5);
+            const ma10 = calcMA(prices, 10);
+            const ma20 = calcMA(prices, 20);
+
+            const trendEl = document.getElementById('chartTrend');
+            const trendChart = echarts.init(trendEl);
+            trendChart.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+                legend: { data: ['收盘价', 'MA5', 'MA10', 'MA20'], top: 0 },
+                grid: { left: '8%', right: '5%', top: 40, bottom: 20 },
+                xAxis: { type: 'category', data: dates, axisLabel: { rotate: 30, fontSize: 10 } },
+                yAxis: { type: 'value', scale: true },
+                series: [
+                    { name: '收盘价', type: 'line', data: prices, smooth: true, lineStyle: { width: 2 }, areaStyle: { opacity: 0.1 } },
+                    { name: 'MA5', type: 'line', data: ma5, smooth: true, lineStyle: { width: 1, type: 'dashed' }, symbol: 'none' },
+                    { name: 'MA10', type: 'line', data: ma10, smooth: true, lineStyle: { width: 1, type: 'dashed' }, symbol: 'none' },
+                    { name: 'MA20', type: 'line', data: ma20, smooth: true, lineStyle: { width: 1, type: 'dashed' }, symbol: 'none' },
+                ]
+            });
+            window.addEventListener('resize', () => trendChart.resize());
+
+            // 成交量图
+            const volEl = document.getElementById('chartVolume');
+            const volChart = echarts.init(volEl);
+            volChart.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: '8%', right: '5%', top: 10, bottom: 20 },
+                xAxis: { type: 'category', data: dates, axisLabel: { show: false } },
+                yAxis: { type: 'value', name: '成交量(手)' },
+                series: [{
+                    type: 'bar',
+                    data: data.map(d => ({
+                        value: d.volume || 0,
+                        itemStyle: { color: d.change_pct >= 0 ? '#e74c3c' : '#27ae60' }
+                    })),
+                }]
+            });
+            window.addEventListener('resize', () => volChart.resize());
+        });
+
+    // 预测数据
+    fetch(`/api/stock/${code}/predict`)
+        .then(r => r.json())
+        .then(res => {
+            if (!res.success) {
+                document.getElementById('predictInfo').innerHTML = '<p class="text-danger">预测失败</p>';
+                return;
+            }
+            const d = res.data;
+            if (d.error) {
+                document.getElementById('predictInfo').innerHTML = `<p class="text-muted">${d.error}</p>`;
+                return;
+            }
+            const trendIcon = d.trend === 'up' ? '📈' : '📉';
+            const trendColor = d.trend === 'up' ? 'up' : 'down';
+            const bgClass = d.trend === 'up' ? 'bg-up' : 'bg-down';
+            document.getElementById('predictInfo').innerHTML = `
+                <div class="mb-3 text-center">
+                    <span class="${bgClass}" style="padding:4px 16px;border-radius:20px;font-size:1.1rem;">${trendIcon} ${d.trend === 'up' ? '看涨' : '看跌'}</span>
+                </div>
+                <div class="row text-center mb-2">
+                    <div class="col-6"><small class="text-muted">最新收盘价</small><div class="fw-bold fs-5">${d.last_price}</div></div>
+                    <div class="col-6"><small class="text-muted">预测涨跌幅</small><div class="fw-bold fs-5 ${trendColor}">${d.change_pct >= 0 ? '+' : ''}${d.change_pct}%</div></div>
+                </div>
+                <div class="mb-2"><small class="text-muted">模型: ${d.model_version || 'v1'} · 多项式+加权平均</small></div>
+                <hr>
+                <strong>未来5日预测</strong>
+                ${d.predictions.map(p => {
+                    const diff = ((p.predicted_price - d.last_price) / d.last_price * 100).toFixed(2);
+                    return `<div class="d-flex justify-content-between py-1 border-bottom"><span>${p.date}</span><span class="fw-bold">${p.predicted_price}</span><span class="${diff >= 0 ? 'up' : 'down'} small">${diff >= 0 ? '+' : ''}${diff}%</span></div>`;
+                }).join('')}
+            `;
+        });
+}
+
+loadStockDetail();
+</script>
+{% endblock %}

@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}首页 - A股分析平台{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 text-center mb-3">
+        <h4>预测模型监控</h4>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8 mb-3">
+        <div class="card text-center">
+            <div class="card-body py-5">
+                <div class="text-muted mb-2" style="font-size:1.1rem;">当前预测准确率</div>
+                <div id="mainAccuracy" class="fw-bold" style="font-size:5rem;line-height:1.1;">--</div>
+                <div class="mt-3">
+                    <span id="accuracyStatus" class="badge bg-secondary" style="font-size:1.1rem;padding:6px 20px;">加载中...</span>
+                </div>
+                <div class="row mt-4 pt-2 justify-content-center">
+                    <div class="col-3">
+                        <div class="text-muted small">累计天数</div>
+                        <div id="totalDays" class="fs-4 fw-bold">--</div>
+                    </div>
+                    <div class="col-3">
+                        <div class="text-muted small">总预测数</div>
+                        <div id="totalPreds" class="fs-4 fw-bold">--</div>
+                    </div>
+                    <div class="col-3">
+                        <div class="text-muted small">最新交易日</div>
+                        <div id="latestDate" class="fs-4 fw-bold" style="font-size:1.2rem;">--</div>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <a href="/check" class="btn btn-outline-primary">查看详细预测校验 &rarr;</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12 mb-3">
+        <div class="card">
+            <div class="card-header">准确率趋势（近30天）</div>
+            <div class="card-body">
+                <div id="chartAccuracyTrend" class="chart-container" style="height:250px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">股票搜索</div>
+            <div class="card-body">
+                <div class="input-group">
+                    <input type="text" id="stockSearch" class="form-control" placeholder="输入股票代码或名称搜索..."
+                           onkeyup="if(event.key==='Enter') searchStock()">
+                    <button class="btn btn-primary" onclick="searchStock()">搜索</button>
+                </div>
+                <div id="searchResults" class="mt-2"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function searchStock() {
+    const q = document.getElementById('stockSearch').value.trim();
+    if (!q) return;
+    fetch('/api/stock/search?q=' + encodeURIComponent(q))
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            var div = document.getElementById('searchResults');
+            if (!res.success || !res.data.length) {
+                div.innerHTML = '<div class="text-muted mt-2">未找到匹配的股票</div>';
+                return;
+            }
+            div.innerHTML = '<div class="list-group mt-2">' +
+                res.data.map(function(s) {
+                    return '<a href="/stock/' + s.code + '" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">' +
+                        '<span><strong>' + s.code + '</strong> ' + (s.name || '') + '</span>' +
+                        '<span class="badge bg-primary rounded-pill">查看详情</span></a>';
+                }).join('') + '</div>';
+        });
+}
+
+function loadAccuracy() {
+    fetch('/api/predict/accuracy')
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (!res.success) {
+                document.getElementById('mainAccuracy').textContent = '--';
+                return;
+            }
+            var d = res.data;
+            document.getElementById('totalDays').textContent = (d.daily || []).length;
+            document.getElementById('totalPreds').textContent = d.total_predictions || 0;
+
+            var acc = d.avg_accuracy || 0;
+            var accEl = document.getElementById('mainAccuracy');
+            accEl.textContent = acc.toFixed(1) + '%';
+
+            var color, statusText, badgeCls;
+            if (d.alert && acc > 80) {
+                color = '#e74c3c';
+                statusText = '模型表现良好';
+                badgeCls = 'bg-success';
+            } else if (acc >= 60) {
+                color = '#f39c12';
+                statusText = '持续监控中';
+                badgeCls = 'bg-warning text-dark';
+            } else {
+                color = '#6c757d';
+                statusText = '数据积累中';
+                badgeCls = 'bg-secondary';
+            }
+            accEl.style.color = color;
+            document.getElementById('accuracyStatus').textContent = statusText;
+            document.getElementById('accuracyStatus').className = 'badge ' + badgeCls;
+            document.getElementById('accuracyStatus').style.cssText += 'font-size:1.1rem;padding:6px 20px;';
+
+            if (d.daily && d.daily.length) {
+                document.getElementById('latestDate').textContent = d.daily[0].date;
+            }
+
+            var trendEl = document.getElementById('chartAccuracyTrend');
+            if (d.daily && d.daily.length >= 2) {
+                var dates = d.daily.map(function(x) { return x.date; }).reverse();
+                var accs = d.daily.map(function(x) { return x.accuracy; }).reverse();
+                var chart = echarts.init(trendEl);
+                chart.setOption({
+                    tooltip: { trigger: 'axis' },
+                    grid: { left: '8%', right: '5%', top: 15, bottom: 20 },
+                    xAxis: { type: 'category', data: dates, axisLabel: { fontSize: 10 } },
+                    yAxis: { type: 'value', min: 0, max: 100, name: '准确率%' },
+                    series: [{
+                        type: 'line', data: accs, smooth: true,
+                        lineStyle: { width: 3, color: '#e74c3c' },
+                        areaStyle: { color: 'rgba(231,76,60,0.1)' },
+                        markLine: {
+                            data: [{ yAxis: 80, label: { formatter: '80% 阈值' } }],
+                            lineStyle: { color: '#27ae60', type: 'dashed' }
+                        }
+                    }]
+                });
+                window.addEventListener('resize', function() { chart.resize(); });
+            } else {
+                trendEl.innerHTML = '<div class="text-center text-muted py-5">数据积累中（至少需要2天数据）</div>';
+            }
+        });
+}
+
+loadAccuracy();
+</script>
+{% endblock %}

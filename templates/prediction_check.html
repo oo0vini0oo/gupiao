@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}预测校验 - A股分析平台{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h4 class="mb-3">预测校验分析</h4>
+    </div>
+</div>
+
+<div class="row" id="summaryCards">
+    <div class="col-md-3 col-6 mb-3">
+        <div class="card stat-card">
+            <div class="label">校验日期</div>
+            <div class="number" id="checkDate" style="font-size:1.2rem;">--</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6 mb-3">
+        <div class="card stat-card">
+            <div class="label">总预测数</div>
+            <div class="number" id="totalPreds">--</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6 mb-3">
+        <div class="card stat-card">
+            <div class="label">方向正确</div>
+            <div class="number" id="correctCount">--</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6 mb-3">
+        <div class="card stat-card">
+            <div class="label">准确率</div>
+            <div class="number" id="accuracyPct">--</div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12 mb-3">
+        <div class="card">
+            <div class="card-header">逐只股票预测 vs 实际（按偏差从大到小）</div>
+            <div class="card-body p-0">
+                <div id="predictionDetails">
+                    <div class="text-center text-muted py-3">加载中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function loadCheck() {
+    fetch('/api/predict/check')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.success) {
+                document.getElementById('predictionDetails').innerHTML =
+                    '<div class="text-center text-muted py-3">' + (res.data?.error || '暂无数据') + '</div>';
+                return;
+            }
+            const d = res.data;
+            if (d.error) {
+                document.getElementById('predictionDetails').innerHTML =
+                    '<div class="text-center text-muted py-3">' + d.error + '</div>';
+                return;
+            }
+
+            document.getElementById('checkDate').textContent = d.check_date || '--';
+            document.getElementById('totalPreds').textContent = d.total || 0;
+            document.getElementById('correctCount').textContent = d.correct || 0;
+
+            const accEl = document.getElementById('accuracyPct');
+            const acc = d.accuracy_pct || 0;
+            accEl.textContent = acc.toFixed(1) + '%';
+            accEl.style.color = acc >= 80 ? '#e74c3c' : acc >= 60 ? '#f39c12' : '#27ae60';
+
+            if (!d.details || !d.details.length) {
+                document.getElementById('predictionDetails').innerHTML =
+                    '<div class="text-center text-muted py-3">暂无明细数据</div>';
+                return;
+            }
+
+            let html = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="table-light"><tr>' +
+                '<th>#</th><th>代码</th><th>名称</th><th class="text-end">预测价</th>' +
+                '<th class="text-end">实际价</th><th class="text-end">误差%</th>' +
+                '<th class="text-end">实际涨跌幅</th><th>方向判定</th><th>偏离分析</th></tr></thead><tbody>';
+
+            d.details.forEach((item, i) => {
+                const ok = item.direction_correct;
+                const rowCls = ok === true ? 'table-success' : ok === false ? 'table-danger' : '';
+                const badgeHtml = ok === true
+                    ? '<span class="badge bg-success">正确</span>'
+                    : ok === false
+                        ? '<span class="badge bg-danger">错误</span>'
+                        : '<span class="badge bg-secondary">未知</span>';
+                const chgCls = item.change_pct >= 0 ? 'badge-up' : 'badge-down';
+                const errCls = item.error_pct >= 0 ? 'up' : 'down';
+                html += '<tr class="' + rowCls + '">' +
+                    '<td>' + (i + 1) + '</td>' +
+                    '<td><a href="/stock/' + item.code + '" class="text-decoration-none fw-medium">' + item.code + '</a></td>' +
+                    '<td>' + item.name + '</td>' +
+                    '<td class="text-end">' + item.predicted_price.toFixed(2) + '</td>' +
+                    '<td class="text-end">' + item.actual_price.toFixed(2) + '</td>' +
+                    '<td class="text-end ' + errCls + '">' + (item.error_pct >= 0 ? '+' : '') + item.error_pct.toFixed(2) + '%</td>' +
+                    '<td class="text-end"><span class="' + chgCls + '">' + (item.change_pct >= 0 ? '+' : '') + item.change_pct.toFixed(2) + '%</span></td>' +
+                    '<td>' + badgeHtml + '<br><small class="text-muted">' + item.pred_direction + '→' + item.actual_direction + '</small></td>' +
+                    '<td><small>' + item.analysis + '</small></td>' +
+                    '</tr>';
+            });
+            html += '</tbody></table></div>';
+            document.getElementById('predictionDetails').innerHTML = html;
+        })
+        .catch(function() {
+            document.getElementById('predictionDetails').innerHTML =
+                '<div class="text-center text-muted py-3">加载失败，请稍后重试</div>';
+        });
+}
+
+loadCheck();
+</script>
+{% endblock %}
