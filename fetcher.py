@@ -88,6 +88,8 @@ def fetch_all_stocks():
                     for api_field, db_field in FIELD_MAP.items():
                         is_name = (db_field == "stock_name")
                         record[db_field] = _clean_value(item.get(api_field), is_name)
+                    if record.get("stock_code"):
+                        record["stock_code"] = str(record["stock_code"]).zfill(6)
                     all_records.append(record)
 
                 if len(data) < page_size:

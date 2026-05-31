@@ -36,7 +36,7 @@
                             <th>平均涨跌幅</th>
                             <th>上涨/下跌</th>
                             <th>龙头股（市值 TOP3）</th>
-                            <th>涨幅 TOP3</th>
+                            <th style="width:180px;">涨幅 TOP3</th>
                         </tr></thead>
                         <tbody></tbody>
                     </table>
@@ -61,8 +61,8 @@ function loadSectors() {
             const barChart = echarts.init(barEl);
             barChart.setOption({
                 tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-                grid: { left: '15%', right: '5%', top: 20, bottom: 30 },
-                xAxis: { type: 'category', data: data.map(d => d.sector), axisLabel: { rotate: 0 } },
+                grid: { left: '15%', right: '5%', top: 30, bottom: 40 },
+                xAxis: { type: 'category', data: data.map(d => d.sector), axisLabel: { fontSize: 11, interval: 0 } },
                 yAxis: { type: 'value', name: '平均涨跌幅(%)' },
                 series: [{
                     type: 'bar',
@@ -82,9 +82,10 @@ function loadSectors() {
                 tooltip: { trigger: 'item', formatter: '{b}: {c}万元 ({d}%)' },
                 series: [{
                     type: 'pie',
-                    radius: ['30%', '60%'],
+                    radius: ['25%', '55%'],
+                    avoidLabelOverlap: true,
                     data: data.map(d => ({ name: d.sector, value: d.total_market_cap })),
-                    label: { formatter: '{b}\n{d}%' },
+                    label: { formatter: '{b}\n{d}%', fontSize: 11 },
                 }]
             });
             window.addEventListener('resize', () => pieChart.resize());
@@ -92,16 +93,20 @@ function loadSectors() {
             // 表格
             const tbody = document.querySelector('#leaderTable tbody');
             tbody.innerHTML = data.map(d => {
-                const leaders = d.leaders.map(l => `<a href="/stock/${l.code}" class="text-decoration-none">${l.code}</a>`).join(', ');
-                const gainers = d.top_gainers.map(g => `<a href="/stock/${g.code}" class="text-decoration-none">${g.code}</a> <span class="up">${g.change_pct}%</span>`).join(', ');
+                const leaders = d.leaders.map(l =>
+                    `<div style="margin-bottom:4px;"><a href="/stock/${l.code}" class="text-decoration-none fw-medium">${l.name}</a> <span class="text-muted small">${l.code}</span><br><span class="small text-muted">市值 ${(l.market_cap / 10000).toFixed(1)}亿</span></div>`
+                ).join('');
+                const gainers = d.top_gainers.map(g =>
+                    `<div style="margin-bottom:4px;"><a href="/stock/${g.code}" class="text-decoration-none">${g.name}</a> <span class="text-muted small">${g.code}</span><br><span class="${g.change_pct >= 0 ? 'up' : 'down'} fw-bold">${g.change_pct >= 0 ? '+' : ''}${g.change_pct}%</span></div>`
+                ).join('');
                 const avgClass = d.avg_change_pct >= 0 ? 'up' : 'down';
                 return `<tr>
                     <td><strong>${d.sector}</strong></td>
                     <td>${d.count}</td>
-                    <td class="${avgClass}">${d.avg_change_pct}%</td>
-                    <td><span class="up">${d.up_count}</span> / <span class="down">${d.down_count}</span></td>
-                    <td>${leaders}</td>
-                    <td>${gainers}</td>
+                    <td class="${avgClass} fw-bold">${d.avg_change_pct >= 0 ? '+' : ''}${d.avg_change_pct}%</td>
+                    <td><span class="up fw-bold">${d.up_count}</span> / <span class="down fw-bold">${d.down_count}</span></td>
+                    <td style="line-height:1.6;">${leaders}</td>
+                    <td style="line-height:1.6;">${gainers}</td>
                 </tr>`;
             }).join('');
         });

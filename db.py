@@ -57,6 +57,56 @@ CREATE TABLE IF NOT EXISTS stock_predictions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='股票预测记录';
 """
 
+CREATE_VIRTUAL_ACCOUNT_SQL = """
+CREATE TABLE IF NOT EXISTS virtual_account (
+    id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+    cash_balance DECIMAL(20,4) NOT NULL DEFAULT 50000 COMMENT '现金余额',
+    init_balance DECIMAL(20,4) NOT NULL DEFAULT 50000 COMMENT '初始资金',
+    created_at   DATETIME COMMENT '创建时间',
+    updated_at   DATETIME COMMENT '更新时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='虚拟投资账户';
+"""
+
+CREATE_VIRTUAL_HOLDINGS_SQL = """
+CREATE TABLE IF NOT EXISTS virtual_holdings (
+    id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+    stock_code   VARCHAR(10)  NOT NULL COMMENT '股票代码',
+    stock_name   VARCHAR(50)  COMMENT '股票名称',
+    quantity     INT          NOT NULL COMMENT '持仓数量',
+    buy_price    DECIMAL(10,3) NOT NULL COMMENT '买入均价',
+    buy_date     DATE         NOT NULL COMMENT '买入日期',
+    UNIQUE KEY uk_code (stock_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='虚拟持仓';
+"""
+
+CREATE_VIRTUAL_TRANSACTIONS_SQL = """
+CREATE TABLE IF NOT EXISTS virtual_transactions (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    stock_code      VARCHAR(10)  NOT NULL COMMENT '股票代码',
+    stock_name      VARCHAR(50)  COMMENT '股票名称',
+    tx_type         VARCHAR(4)   NOT NULL COMMENT 'buy/sell',
+    quantity        INT          NOT NULL COMMENT '数量',
+    price           DECIMAL(10,3) NOT NULL COMMENT '成交价',
+    amount          DECIMAL(20,4) NOT NULL COMMENT '成交金额',
+    transaction_date DATE        NOT NULL COMMENT '交易日期',
+    created_at      DATETIME     COMMENT '创建时间',
+    INDEX idx_tx_date (transaction_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='虚拟交易记录';
+"""
+
+CREATE_VIRTUAL_DAILY_PNL_SQL = """
+CREATE TABLE IF NOT EXISTS virtual_daily_pnl (
+    id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+    trade_date     DATE         NOT NULL COMMENT '交易日',
+    total_assets   DECIMAL(20,4) COMMENT '总资产',
+    cash_balance   DECIMAL(20,4) COMMENT '现金余额',
+    holdings_value DECIMAL(20,4) COMMENT '持仓市值',
+    daily_pnl      DECIMAL(20,4) COMMENT '当日盈亏',
+    total_pnl      DECIMAL(20,4) COMMENT '累计盈亏',
+    UNIQUE KEY uk_date (trade_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='虚拟投资每日盈亏快照';
+"""
+
 CREATE_ACCURACY_SQL = """
 CREATE TABLE IF NOT EXISTS prediction_accuracy (
     id                 BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -103,8 +153,13 @@ def init_tables():
             cur.execute(CREATE_STOCK_LIST_SQL)
             cur.execute(CREATE_PREDICTIONS_SQL)
             cur.execute(CREATE_ACCURACY_SQL)
+            cur.execute(CREATE_VIRTUAL_ACCOUNT_SQL)
+            cur.execute(CREATE_VIRTUAL_HOLDINGS_SQL)
+            cur.execute(CREATE_VIRTUAL_TRANSACTIONS_SQL)
+            cur.execute(CREATE_VIRTUAL_DAILY_PNL_SQL)
         conn.commit()
         print("    stock_daily / stock_list / stock_predictions / prediction_accuracy 已就绪")
+        print("    virtual_account / virtual_holdings / virtual_transactions / virtual_daily_pnl 已就绪")
     finally:
         conn.close()
 

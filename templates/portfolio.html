@@ -1,0 +1,385 @@
+{% extends "base.html" %}
+{% block title %}投资组合 - 虚拟投资{% endblock %}
+
+{% block head %}
+<style>
+.asset-card {
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    background: #fafbfc;
+    border: 1px solid #eee;
+}
+.asset-card .label {
+    font-size: 0.85rem;
+    color: #888;
+}
+.asset-card .value {
+    font-size: 1.6rem;
+    font-weight: 700;
+}
+.asset-card .sub {
+    font-size: 0.9rem;
+}
+.tx-type-buy { color: #e74c3c; font-weight: 600; }
+.tx-type-sell { color: #27ae60; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">投资组合</h5>
+            <div>
+                <span class="text-muted" style="font-size:0.85rem;" id="portfolioDate"></span>
+                <button class="btn btn-sm btn-outline-secondary ms-2" onclick="refreshAll()">刷新</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 资产概览 -->
+<div class="row g-2 mb-3" id="assetOverview">
+    <div class="col-6 col-md-3">
+        <div class="asset-card">
+            <div class="label">总资产</div>
+            <div class="value" id="totalAssets">--</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="asset-card">
+            <div class="label">现金余额</div>
+            <div class="value" id="cashBalance">--</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="asset-card">
+            <div class="label">持仓市值</div>
+            <div class="value" id="holdingsValue">--</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="asset-card">
+            <div class="label">累计盈亏</div>
+            <div class="value" id="totalPnl">--</div>
+        </div>
+    </div>
+</div>
+
+<!-- 操作区 -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header py-2">交易操作</div>
+            <div class="card-body py-2">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3" style="position:relative;">
+                        <label class="form-label small mb-1">股票代码/名称</label>
+                        <input type="text" id="tradeCode" class="form-control form-control-sm" placeholder="如 600519 或 茅台"
+                               autocomplete="off">
+                        <div id="codeSuggest" class="list-group" style="position:absolute;z-index:1000;width:100%;display:none;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15);border-radius:0 0 8px 8px;"></div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small mb-1">数量(股)</label>
+                        <input type="number" id="tradeQty" class="form-control form-control-sm" placeholder="100" min="1">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small mb-1">最新价</label>
+                        <div id="tradePrice" class="form-control form-control-sm text-muted bg-light" style="cursor:default;">--</div>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-danger btn-sm w-100" onclick="doBuy()">买入</button>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-success btn-sm w-100" onclick="doSell()">卖出</button>
+                    </div>
+                </div>
+                <div id="tradeMessage" class="mt-2 small"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 持仓列表 -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header py-2">持仓明细</div>
+            <div class="card-body p-0" id="holdingsTable">
+                <div class="text-center text-muted py-3">加载中...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 每日盈亏曲线 -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header py-2">每日盈亏趋势</div>
+            <div class="card-body">
+                <div id="chartPnl" class="chart-container" style="height:300px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 交易记录 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header py-2">交易记录</div>
+            <div class="card-body p-0" id="transactionTable">
+                <div class="text-center text-muted py-3">加载中...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var _selectedCode = null;
+var _searchTimer = null;
+
+function refreshAll() {
+    loadPortfolio();
+    loadTransactions();
+    loadPnlChart();
+}
+
+function doSearch() {
+    var q = document.getElementById('tradeCode').value.trim();
+    if (q.length < 1) {
+        document.getElementById('codeSuggest').style.display = 'none';
+        _selectedCode = null;
+        return;
+    }
+    fetch('/api/stock/search?q=' + encodeURIComponent(q))
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            var el = document.getElementById('codeSuggest');
+            if (!res.success || !res.data.length) {
+                el.style.display = 'none';
+                return;
+            }
+            var html = '';
+            res.data.forEach(function(s) {
+                html += '<a href="#" class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.85rem;border:none;border-bottom:1px solid #f0f0f0;" ' +
+                    'onclick="selectStock(\'' + s.code + '\',\'' + (s.name || '').replace(/'/g,"\\'") + '\');return false;">' +
+                    '<strong>' + s.code + '</strong> <span class="text-muted">' + (s.name || '') + '</span></a>';
+            });
+            el.innerHTML = html;
+            el.style.display = 'block';
+        });
+}
+
+function selectStock(code, name) {
+    _selectedCode = code;
+    document.getElementById('tradeCode').value = code + ' ' + name;
+    document.getElementById('codeSuggest').style.display = 'none';
+    fetch('/api/stock/' + code + '/history')
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (res.success && res.data.length) {
+                var last = res.data[res.data.length - 1];
+                document.getElementById('tradePrice').textContent = last.price ? last.price.toFixed(2) : '--';
+            }
+        });
+}
+
+document.getElementById('tradeCode').addEventListener('input', function() {
+    _selectedCode = null;
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(doSearch, 200);
+});
+document.getElementById('tradeCode').addEventListener('blur', function() {
+    setTimeout(function() { document.getElementById('codeSuggest').style.display = 'none'; }, 200);
+});
+document.getElementById('tradeCode').addEventListener('focus', function() {
+    if (this.value.trim().length >= 1) doSearch();
+});
+
+function getCode() {
+    if (_selectedCode) return _selectedCode;
+    var v = document.getElementById('tradeCode').value.trim();
+    if (/^\d{6}$/.test(v)) return v;
+    return null;
+}
+
+function doBuy() {
+    var code = getCode();
+    var qty = parseInt(document.getElementById('tradeQty').value);
+    if (!code || !qty || qty <= 0) {
+        showTradeMsg('请输入股票代码或名称选择股票，以及数量', 'text-danger');
+        return;
+    }
+    fetch('/api/portfolio/buy', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({code: code, quantity: qty})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        if (res.success) {
+            showTradeMsg(res.message, 'text-success');
+            refreshAll();
+        } else {
+            showTradeMsg(res.error, 'text-danger');
+        }
+    })
+    .catch(function() { showTradeMsg('请求失败', 'text-danger'); });
+}
+
+function doSell() {
+    var code = getCode();
+    var qty = document.getElementById('tradeQty').value;
+    qty = qty ? parseInt(qty) : null;
+    if (!code) {
+        showTradeMsg('请输入股票代码或名称选择股票', 'text-danger');
+        return;
+    }
+    fetch('/api/portfolio/sell', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({code: code, quantity: qty})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        if (res.success) {
+            showTradeMsg(res.message + ' | 盈亏: ' + (res.profit >= 0 ? '+' : '') + res.profit.toFixed(2) + '元 (' + (res.profit_pct >= 0 ? '+' : '') + res.profit_pct + '%)', 'text-success');
+            refreshAll();
+        } else {
+            showTradeMsg(res.error, 'text-danger');
+        }
+    })
+    .catch(function() { showTradeMsg('请求失败', 'text-danger'); });
+}
+
+function showTradeMsg(msg, cls) {
+    var el = document.getElementById('tradeMessage');
+    el.textContent = msg;
+    el.className = 'mt-2 small ' + cls;
+}
+
+function loadPortfolio() {
+    fetch('/api/portfolio')
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (!res.success) return;
+            var d = res.data;
+            document.getElementById('totalAssets').textContent = d.total_assets.toFixed(2);
+            document.getElementById('cashBalance').textContent = d.cash_balance.toFixed(2);
+            document.getElementById('holdingsValue').textContent = d.holdings_value.toFixed(2);
+            var pnlEl = document.getElementById('totalPnl');
+            pnlEl.textContent = (d.total_pnl >= 0 ? '+' : '') + d.total_pnl.toFixed(2) + ' (' + (d.total_pnl_pct >= 0 ? '+' : '') + d.total_pnl_pct + '%)';
+            pnlEl.style.color = d.total_pnl >= 0 ? '#e74c3c' : '#27ae60';
+            document.getElementById('portfolioDate').textContent = '行情基准: ' + (d.latest_trade_date || '--');
+
+            var tbl = document.getElementById('holdingsTable');
+            if (!d.holdings || !d.holdings.length) {
+                tbl.innerHTML = '<div class="text-center text-muted py-3">暂无持仓</div>';
+                return;
+            }
+            var html = '<div class="table-responsive"><table class="table table-sm table-hover mb-0"><thead class="table-light"><tr>' +
+                '<th>代码</th><th>名称</th><th class="text-end">持仓</th><th class="text-end">买入均价</th><th class="text-end">现价</th>' +
+                '<th class="text-end">市值</th><th class="text-end">盈亏</th><th class="text-end">盈亏%</th><th class="text-end">操作</th></tr></thead><tbody>';
+            d.holdings.forEach(function(h) {
+                var pnlCls = h.profit >= 0 ? 'up' : 'down';
+                html += '<tr>' +
+                    '<td><a href="/stock/' + h.code + '" class="text-decoration-none">' + h.code + '</a></td>' +
+                    '<td>' + (h.name || '') + '</td>' +
+                    '<td class="text-end">' + h.quantity + '</td>' +
+                    '<td class="text-end">' + h.buy_price.toFixed(2) + '</td>' +
+                    '<td class="text-end">' + h.current_price.toFixed(2) + '</td>' +
+                    '<td class="text-end">' + h.market_value.toFixed(2) + '</td>' +
+                    '<td class="text-end ' + pnlCls + '">' + (h.profit >= 0 ? '+' : '') + h.profit.toFixed(2) + '</td>' +
+                    '<td class="text-end ' + pnlCls + '">' + (h.profit_pct >= 0 ? '+' : '') + h.profit_pct + '%</td>' +
+                    '<td class="text-end">' +
+                    '<button class="btn btn-success btn-sm py-0 px-2" style="font-size:0.75rem;" onclick="sellOne(\'' + h.code + '\')">卖出</button>' +
+                    '</td></tr>';
+            });
+            html += '</tbody></table></div>';
+            tbl.innerHTML = html;
+        });
+}
+
+function sellOne(code) {
+    _selectedCode = code;
+    document.getElementById('tradeCode').value = code;
+    document.getElementById('codeSuggest').style.display = 'none';
+    fetch('/api/stock/' + code + '/history')
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (res.success && res.data.length) {
+                var last = res.data[res.data.length - 1];
+                document.getElementById('tradePrice').textContent = last.price ? last.price.toFixed(2) : '--';
+            }
+        });
+    document.getElementById('tradeQty').focus();
+}
+
+function loadTransactions() {
+    fetch('/api/portfolio/transactions')
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            var el = document.getElementById('transactionTable');
+            if (!res.success || !res.data.length) {
+                el.innerHTML = '<div class="text-center text-muted py-3">暂无交易记录</div>';
+                return;
+            }
+            var html = '<div class="table-responsive"><table class="table table-sm table-hover mb-0"><thead class="table-light"><tr>' +
+                '<th>日期</th><th>代码</th><th>名称</th><th>类型</th><th class="text-end">数量</th><th class="text-end">成交价</th><th class="text-end">金额</th></tr></thead><tbody>';
+            res.data.forEach(function(t) {
+                var typeCls = t.tx_type === 'buy' ? 'tx-type-buy' : 'tx-type-sell';
+                var typeLabel = t.tx_type === 'buy' ? '买入' : '卖出';
+                html += '<tr>' +
+                    '<td>' + t.transaction_date + '</td>' +
+                    '<td>' + t.stock_code + '</td>' +
+                    '<td>' + (t.stock_name || '') + '</td>' +
+                    '<td class="' + typeCls + '">' + typeLabel + '</td>' +
+                    '<td class="text-end">' + t.quantity + '</td>' +
+                    '<td class="text-end">' + t.price.toFixed(2) + '</td>' +
+                    '<td class="text-end">' + t.amount.toFixed(2) + '</td></tr>';
+            });
+            html += '</tbody></table></div>';
+            el.innerHTML = html;
+        });
+}
+
+function loadPnlChart() {
+    fetch('/api/portfolio/pnl')
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            var el = document.getElementById('chartPnl');
+            if (!res.success || !res.data.length) {
+                el.innerHTML = '<div class="text-center text-muted py-5">暂无数据（需要每日结算）</div>';
+                return;
+            }
+            var dates = res.data.map(function(d) { return d.date; });
+            var assets = res.data.map(function(d) { return d.total_assets; });
+            var pnl = res.data.map(function(d) { return d.daily_pnl; });
+
+            var chart = echarts.init(el);
+            chart.setOption({
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['总资产', '每日盈亏'], top: 0 },
+                grid: { left: '8%', right: '5%', top: 40, bottom: 30 },
+                xAxis: { type: 'category', data: dates, axisLabel: { fontSize: 10, rotate: 30 } },
+                yAxis: [
+                    { type: 'value', name: '总资产' },
+                    { type: 'value', name: '盈亏' },
+                ],
+                series: [
+                    { name: '总资产', type: 'line', data: assets, smooth: true, lineStyle: { width: 2, color: '#e74c3c' }, areaStyle: { opacity: 0.1 } },
+                    { name: '每日盈亏', type: 'bar', data: pnl, yAxisIndex: 1, itemStyle: { color: function(p) { return p.value >= 0 ? '#e74c3c' : '#27ae60'; } } },
+                ]
+            });
+            window.addEventListener('resize', function() { chart.resize(); });
+        });
+}
+
+refreshAll();
+</script>
+{% endblock %}

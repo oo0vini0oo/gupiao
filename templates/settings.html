@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block title %}预测查询 - A股分析平台{% endblock %}
+
+{% block head %}
+<style>
+    .result-card { border-radius: 12px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 16px; }
+    .result-card .card-header { background: #fff; border-bottom: 1px solid #f0f0f0; font-weight: 600; border-radius: 12px 12px 0 0 !important; }
+    .big-number { font-size: 2.5rem; font-weight: 700; line-height: 1.2; }
+    .metric-label { font-size: 0.8rem; color: #888; }
+    .detail-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #f0f0f0; font-size: 0.9rem; }
+    .detail-row:last-child { border-bottom: none; }
+    .tag { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 0.75rem; font-weight: 500; }
+    .tag-rise { background: #fde8e8; color: #e74c3c; }
+    .tag-fall { background: #e8f8ee; color: #27ae60; }
+    .news-item { padding: 6px 0; border-bottom: 1px dashed #f0f0f0; font-size: 0.85rem; }
+    .news-item:last-child { border-bottom: none; }
+    .news-item .source { color: #999; font-size: 0.75rem; }
+    #loading { display: none; }
+    #loading .spinner-border { width: 1.5rem; height: 1.5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body py-3">
+                <h5 class="mb-1">预测查询</h5>
+                <small class="text-muted">输入股票代码、名称或热点关键词，分析预测涨跌趋势</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body py-3">
+                <div class="input-group">
+                    <input type="text" id="queryInput" class="form-control form-control-lg"
+                           placeholder="例如：600519、贵州茅台、芯片、新能源"
+                           onkeydown="if(event.key==='Enter') doPredict()">
+                    <button class="btn btn-primary btn-lg px-4" onclick="doPredict()">预测</button>
+                </div>
+                <div id="matchHint" class="mt-2 text-muted small" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body py-2">
+                <button class="btn btn-outline-secondary btn-sm" type="button" onclick="toggleMappingEditor()">编辑行业分类</button>
+                <small class="text-muted ms-2">管理关键词→股票代码映射关系</small>
+                <div id="mappingEditor" style="display:none;" class="mt-2 pt-2 border-top">
+                    <div id="mappingLoading" class="text-muted small">加载中...</div>
+                    <div id="mappingContent"></div>
+                    <div class="mt-2 text-end">
+                        <button class="btn btn-primary btn-sm" onclick="saveMapping()">保存行业分类</button>
+                        <span id="mappingSaveStatus" class="small ms-2"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="loading" class="text-center py-5">
+    <div class="spinner-border text-primary mb-2" role="status"></div>
+    <div class="text-muted">分析中，请稍候...</div>
+</div>
+
+<div id="resultArea"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var searchTimer = null;
+
+document.getElementById('queryInput').addEventListener('input', function() {
+    var q = this.value.trim();
+    var hint = document.getElementById('matchHint');
+    if (q.length < 1) { hint.style.display = 'none'; return; }
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function() {
+        fetch('/api/stock/search?q=' + encodeURIComponent(q))
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (res.success && res.data.length > 0) {
+                    var s = res.data[0];
+                    hint.innerHTML = '匹配股票: <strong>' + s.code + ' ' + s.name + '</strong> (点击预测将分析此股票)';
+                    hint.style.display = 'block';
+                } else {
+                    hint.innerHTML = '未匹配到股票，将按热点关键词分析';
+                    hint.style.display = 'block';
+                }
+            });
+    }, 300);
+});
+
+function doPredict() {
+    var q = document.getElementById('queryInput').value.trim();
+    if (!q) return;
+    document.getElementById('resultArea').innerHTML = '';
+    document.getElementById('loading').style.display = 'block';
+
+    fetch('/api/predict/by_input', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({query: q}),
+    })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            document.getElementById('loading').style.display = 'none';
+            if (!res.success) {
+                document.getElementById('resultArea').innerHTML =
+                    '<div class="alert alert-danger">' + (res.error || '分析失败') + '</div>';
+                return;
+            }
+            renderResult(res.data);
+        })
+        .catch(function() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('resultArea').innerHTML =
+                '<div class="alert alert-danger">请求失败，请重试</div>';
+        });
+}
+
+function renderResult(data) {
+    var html = '';
+
+    if (data.type === 'stock') {
+        // ── 股票预测结果 ──
+        var p = data.prediction;
+        var predCls = p.predicted_change >= 0 ? 'up' : 'down';
+        var dirText = p.predicted_change >= 0 ? '看涨' : '看跌';
+        var dirBadge = p.predicted_change >= 0 ? 'tag-rise' : 'tag-fall';
+        var arrow = p.predicted_change >= 0 ? '↑' : '↓';
+
+        html += '<div class="row">';
+        html += '  <div class="col-md-6">';
+        html += '    <div class="card result-card">';
+        html += '      <div class="card-header">' + data.name + ' (' + data.code + ')</div>';
+        html += '      <div class="card-body">';
+        html += '        <div class="row text-center mb-3">';
+        html += '          <div class="col-4">';
+        html += '            <div class="metric-label">收盘价</div>';
+        html += '            <div class="big-number">' + p.price.toFixed(2) + '</div>';
+        html += '          </div>';
+        html += '          <div class="col-4">';
+        html += '            <div class="metric-label">预估涨幅</div>';
+        html += '            <div class="big-number ' + predCls + '">' + (p.predicted_change >= 0 ? '+' : '') + p.predicted_change.toFixed(2) + '%</div>';
+        html += '          </div>';
+        html += '          <div class="col-4">';
+        html += '            <div class="metric-label">目标价</div>';
+        html += '            <div class="big-number">' + p.target_price.toFixed(2) + '</div>';
+        html += '          </div>';
+        html += '        </div>';
+        html += '        <div class="text-center mb-2">';
+        html += '          <span class="tag ' + dirBadge + '" style="font-size:1rem;padding:4px 20px;">' + arrow + ' ' + dirText + '</span>';
+        html += '        </div>';
+        html += '      </div>';
+        html += '    </div>';
+        html += '  </div>';
+        html += '  <div class="col-md-6">';
+        html += '    <div class="card result-card">';
+        html += '      <div class="card-header">分析依据</div>';
+        html += '      <div class="card-body">';
+        html += '        <div class="detail-row"><span class="text-muted">模型综合价</span><span class="fw-bold">' + p.ensemble_price.toFixed(2) + '</span></div>';
+        if (p.poly_price) html += '        <div class="detail-row"><span class="text-muted">多项式回归价</span><span>' + p.poly_price.toFixed(2) + '</span></div>';
+        if (p.wma_price) html += '        <div class="detail-row"><span class="text-muted">加权移动平均价</span><span>' + p.wma_price.toFixed(2) + '</span></div>';
+        if (p.recent_trend) html += '        <div class="detail-row"><span class="text-muted">近期走势</span><span>' + p.recent_trend + '</span></div>';
+        if (p.reason) html += '        <div class="detail-row"><span class="text-muted">分析理由</span><span>' + p.reason + '</span></div>';
+        html += '        <div class="detail-row"><span class="text-muted">数据日期</span><span>' + (p.trade_date || '--') + '</span></div>';
+        html += '        <div class="detail-row"><span class="text-muted">目标交易日</span><span>' + (p.target_date || '--') + '</span></div>';
+        html += '      </div>';
+        html += '    </div>';
+        html += '  </div>';
+        html += '</div>';
+
+        // ── 历史收盘趋势（迷你图表） ──
+        if (data.history && data.history.length > 0) {
+            html += '<div class="card result-card">';
+            html += '  <div class="card-header">历史收盘价走势</div>';
+            html += '  <div class="card-body">';
+            html += '    <div id="historyChart" style="height:200px;"></div>';
+            html += '  </div>';
+            html += '</div>';
+        }
+    } else if (data.type === 'keyword') {
+        // ── 关键词关联股票预测结果 ──
+        if (data.stocks && data.stocks.length > 0) {
+            html += '<div class="card result-card">';
+            html += '  <div class="card-header">"' + data.keyword + '" 相关股票预测</div>';
+            html += '  <div class="card-body p-0">';
+            html += '    <div class="table-responsive"><table class="table table-hover mb-0">';
+            html += '      <thead class="table-light"><tr><th>代码</th><th>名称</th><th class="text-end">最新价</th><th class="text-end">当日涨跌</th><th class="text-end">预测涨跌</th><th class="text-end">目标价</th></tr></thead><tbody>';
+            data.stocks.forEach(function(s) {
+                var cls = s.change_pct >= 0 ? 'up' : 'down';
+                var predCls = s.trend === 'up' ? 'up' : 'down';
+                var predText = s.predicted_change !== undefined ? (s.predicted_change >= 0 ? '+' : '') + s.predicted_change.toFixed(2) + '%' : '--';
+                var targetText = s.predicted_price !== undefined ? s.predicted_price.toFixed(2) : '--';
+                var priceText = s.price && s.price > 0 ? s.price.toFixed(2) : '--';
+                var chgText = s.change_pct !== undefined ? (s.change_pct >= 0 ? '+' : '') + s.change_pct.toFixed(2) + '%' : '--';
+                html += '<tr><td><a href="/stock/' + s.code + '">' + s.code + '</a></td><td>' + s.name + '</td><td class="text-end">' + priceText + '</td><td class="text-end ' + cls + '">' + chgText + '</td><td class="text-end ' + predCls + '">' + predText + '</td><td class="text-end">' + targetText + '</td></tr>';
+            });
+            html += '      </tbody></table></div>';
+            html += '  </div>';
+            html += '</div>';
+        } else {
+            html += '<div class="alert alert-info">未找到与 "' + data.keyword + '" 相关的股票，试试其他关键词</div>';
+        }
+    }
+
+    document.getElementById('resultArea').innerHTML = html;
+
+    // ── 渲染历史走势图 ──
+    if (data.type === 'stock' && data.history && data.history.length > 0) {
+        setTimeout(function() {
+            var chart = echarts.init(document.getElementById('historyChart'));
+            chart.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: '10%', right: '8%', top: 20, bottom: 60 },
+                xAxis: { type: 'category', data: data.history.map(function(h) { return h.date; }), axisLabel: { fontSize: 10, rotate: 45, margin: 8 } },
+                yAxis: { type: 'value', scale: true },
+                series: [{
+                    type: 'line', data: data.history.map(function(h) { return h.price; }), smooth: true,
+                    lineStyle: { width: 2, color: '#e74c3c' },
+                    areaStyle: { color: 'rgba(231,76,60,0.1)' },
+                }],
+            });
+        }, 100);
+    }
+}
+
+// ── 行业分类映射编辑器 ──
+var mappingLoaded = false;
+
+function toggleMappingEditor() {
+    var el = document.getElementById('mappingEditor');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    if (el.style.display === 'block' && !mappingLoaded) {
+        loadMapping();
+    }
+}
+
+function loadMapping() {
+    fetch('/api/settings')
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            mappingLoaded = true;
+            if (!res.success) {
+                document.getElementById('mappingContent').innerHTML = '<div class="text-danger">加载失败</div>';
+                return;
+            }
+            var mapping = res.data.stock_mapping || {};
+            var keys = Object.keys(mapping);
+            var html = '<table class="table table-sm mb-0"><thead><tr><th style="width:100px;">关键词</th><th>股票代码及名称（格式：代码,名称;代码,名称）</th></tr></thead><tbody>';
+            keys.forEach(function(k) {
+                html += '<tr><td><input class="form-control form-control-sm mapping-key" value="' + k + '"></td>' +
+                    '<td><textarea class="form-control form-control-sm mapping-val" rows="2">' + (mapping[k] || '') + '</textarea></td></tr>';
+            });
+            html += '</tbody></table>';
+            html += '<div class="mt-1"><small class="text-muted">示例：白酒 → 600519,贵州茅台;000858,五粮液</small></div>';
+            document.getElementById('mappingContent').innerHTML = html;
+            document.getElementById('mappingLoading').style.display = 'none';
+        });
+}
+
+function saveMapping() {
+    var keys = document.querySelectorAll('.mapping-key');
+    var vals = document.querySelectorAll('.mapping-val');
+    var mapping = {};
+    for (var i = 0; i < keys.length; i++) {
+        var k = keys[i].value.trim();
+        if (k) mapping[k] = vals[i].value.trim();
+    }
+    var statusEl = document.getElementById('mappingSaveStatus');
+    statusEl.textContent = '保存中...';
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({stock_mapping: mapping}),
+    })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            statusEl.textContent = res.success ? '✓ 已保存' : '✗ ' + (res.error || '保存失败');
+            if (res.success) setTimeout(function() { statusEl.textContent = ''; }, 3000);
+        });
+}
+</script>
+{% endblock %}

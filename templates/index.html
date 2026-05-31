@@ -1,66 +1,207 @@
 {% extends "base.html" %}
 {% block title %}首页 - A股分析平台{% endblock %}
 
+{% block head %}
+<style>
+.stock-pick-card {
+    border: 1px solid #eee;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    transition: box-shadow .2s;
+    background: #fafbfc;
+}
+.stock-pick-card:hover {
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    background: #fff;
+}
+.pick-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+.pick-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.pick-rank {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: #999;
+    min-width: 28px;
+}
+.pick-code {
+    font-weight: 700;
+    font-size: 1rem;
+    text-decoration: none;
+    color: #1a1a2e;
+}
+.pick-code:hover { color: #e74c3c; }
+.pick-name {
+    font-size: 0.9rem;
+    color: #555;
+}
+.sector-badge {
+    font-size: 0.7rem !important;
+    padding: 2px 8px !important;
+    border-radius: 10px !important;
+    font-weight: 500;
+}
+.confidence-badge {
+    font-size: 0.7rem !important;
+    padding: 2px 8px !important;
+    border-radius: 10px !important;
+}
+.pick-price { display: none; }
+.day-chg {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+.pick-prediction {
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 8px;
+    padding: 4px 0;
+    border-bottom: 1px dashed #eee;
+}
+.pick-summary {
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: #444;
+    padding: 6px 0 2px 0;
+}
+.pick-risk {
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: #c62828;
+    background: #fce4ec;
+    padding: 4px 10px;
+    border-radius: 6px;
+    margin-top: 4px;
+}
+.reason-tag {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #f0f0f0;
+    color: #555;
+}
+.word-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 8px 14px;
+    padding: 4px 0;
+}
+.word-item {
+    display: inline-block;
+    color: #1a1a2e;
+    transition: all .2s;
+    cursor: default;
+    line-height: 1.3;
+}
+.word-item:hover {
+    color: #e74c3c;
+    transform: scale(1.05);
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="row">
-    <div class="col-12 text-center mb-3">
-        <h4>预测模型监控</h4>
-    </div>
-</div>
-
-<div class="row justify-content-center">
-    <div class="col-md-8 mb-3">
-        <div class="card text-center">
-            <div class="card-body py-5">
-                <div class="text-muted mb-2" style="font-size:1.1rem;">当前预测准确率</div>
-                <div id="mainAccuracy" class="fw-bold" style="font-size:5rem;line-height:1.1;">--</div>
-                <div class="mt-3">
-                    <span id="accuracyStatus" class="badge bg-secondary" style="font-size:1.1rem;padding:6px 20px;">加载中...</span>
-                </div>
-                <div class="row mt-4 pt-2 justify-content-center">
-                    <div class="col-3">
-                        <div class="text-muted small">累计天数</div>
-                        <div id="totalDays" class="fs-4 fw-bold">--</div>
-                    </div>
-                    <div class="col-3">
-                        <div class="text-muted small">总预测数</div>
-                        <div id="totalPreds" class="fs-4 fw-bold">--</div>
-                    </div>
-                    <div class="col-3">
-                        <div class="text-muted small">最新交易日</div>
-                        <div id="latestDate" class="fs-4 fw-bold" style="font-size:1.2rem;">--</div>
-                    </div>
-                </div>
-                <div class="mt-4">
-                    <a href="/check" class="btn btn-outline-primary">查看详细预测校验 &rarr;</a>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-12 mb-3">
-        <div class="card">
-            <div class="card-header">准确率趋势（近30天）</div>
-            <div class="card-body">
-                <div id="chartAccuracyTrend" class="chart-container" style="height:250px;"></div>
-            </div>
-        </div>
-    </div>
-</div>
-
+<!-- Search bar at top -->
 <div class="row mb-3">
     <div class="col-12">
         <div class="card">
-            <div class="card-header">股票搜索</div>
-            <div class="card-body">
+            <div class="card-body py-2">
                 <div class="input-group">
-                    <input type="text" id="stockSearch" class="form-control" placeholder="输入股票代码或名称搜索..."
+                    <input type="text" id="stockSearch" class="form-control" placeholder="输入股票代码或名称搜索，如 600519 或 茅台"
                            onkeyup="if(event.key==='Enter') searchStock()">
                     <button class="btn btn-primary" onclick="searchStock()">搜索</button>
                 </div>
                 <div id="searchResults" class="mt-2"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Accuracy + Trend side by side -->
+<div class="row mb-3">
+    <div class="col-md-5">
+        <div class="card text-center h-100">
+            <div class="card-body py-4">
+                <div class="text-muted mb-2" style="font-size:1rem;">当前预测准确率</div>
+                <div id="mainAccuracy" class="fw-bold" style="font-size:4rem;line-height:1.1;">--</div>
+                <div class="mt-2 mb-3">
+                    <span id="accuracyStatus" class="badge bg-secondary" style="font-size:1rem;padding:4px 16px;">加载中...</span>
+                </div>
+                <div class="row justify-content-center">
+                    <div class="col-4">
+                        <div class="text-muted small">天数</div>
+                        <div id="totalDays" class="fs-5 fw-bold">--</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-muted small">预测数</div>
+                        <div id="totalPreds" class="fs-5 fw-bold">--</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-muted small">最新日</div>
+                        <div id="latestDate" class="fs-6 fw-bold">--</div>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <a href="/check" class="btn btn-outline-primary btn-sm">详细校验 &rarr;</a>
+                    <a href="/predictions" class="btn btn-outline-secondary btn-sm">历史记录 &rarr;</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-7">
+        <div class="card h-100">
+            <div class="card-header py-2">准确率趋势（近30天）</div>
+            <div class="card-body py-2">
+                <div id="chartAccuracyTrend" class="chart-container" style="height:220px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hot keywords word cloud -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header py-2">近期热点词云</div>
+            <div class="card-body py-3" id="wordCloud">
+                <div class="text-center text-muted py-2" style="font-size:0.9rem;">加载中...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tomorrow picks -->
+<div class="row">
+    <div class="col-12 mb-3">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <span>明日预测</span>
+                    <small class="text-muted" id="tomorrowTradeDate" class="ms-2"></small>
+                </div>
+                <ul class="nav nav-pills nav-sm" id="pickTab" style="font-size:0.85rem;">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#" data-tab="all" onclick="switchTab(event, 'all')">全部</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-tab="surge" onclick="switchTab(event, 'surge')">涨幅&gt;10%</a>
+                    </li>
+                </ul>
+            </div>
+            <div class="card-body" id="tomorrowPicks">
+                <div class="text-center text-muted py-3">加载中...</div>
             </div>
         </div>
     </div>
@@ -135,7 +276,7 @@ function loadAccuracy() {
                 var chart = echarts.init(trendEl);
                 chart.setOption({
                     tooltip: { trigger: 'axis' },
-                    grid: { left: '8%', right: '5%', top: 15, bottom: 20 },
+                    grid: { left: '8%', right: '5%', top: 30, bottom: 30 },
                     xAxis: { type: 'category', data: dates, axisLabel: { fontSize: 10 } },
                     yAxis: { type: 'value', min: 0, max: 100, name: '准确率%' },
                     series: [{
@@ -155,6 +296,167 @@ function loadAccuracy() {
         });
 }
 
+var _picksData = null;
+var _surgeData = null;
+var _currentTab = 'all';
+
+function switchTab(ev, tab) {
+    document.querySelectorAll('#pickTab .nav-link').forEach(function(el) {
+        el.classList.remove('active');
+    });
+    ev.target.closest('.nav-link').classList.add('active');
+    _currentTab = tab;
+
+    if (tab === 'surge') {
+        renderSurgePicks();
+    } else {
+        renderPicks('all');
+    }
+}
+
+function renderPicks(tab) {
+    var container = document.getElementById('tomorrowPicks');
+    if (!_picksData || !_picksData.picks || !_picksData.picks.length) {
+        container.innerHTML = '<div class="text-center text-muted py-3">暂无数据</div>';
+        return;
+    }
+    var list = _picksData.picks;
+    var html = renderPickCards(list);
+    container.innerHTML = html;
+    document.getElementById('tomorrowTradeDate').textContent =
+        '基于 ' + _picksData.trade_date + ' 数据 | 分析 ' + _picksData.total_analyzed + ' 只';
+}
+
+function renderSurgePicks() {
+    var container = document.getElementById('tomorrowPicks');
+    if (_surgeData) {
+        container.innerHTML = renderPickCards(_surgeData.candidates);
+        document.getElementById('tomorrowTradeDate').textContent =
+            '全量扫描 ' + (_surgeData.total_scanned || 300) + ' 只 | 符合条件 ' + _surgeData.total_found + ' 只';
+        return;
+    }
+    container.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"></div><div class="mt-2 text-muted">正在全量扫描，请稍候...</div></div>';
+
+    fetch('/api/predict/surge')
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (!res.success || !res.data || !res.data.candidates || !res.data.candidates.length) {
+                container.innerHTML = '<div class="text-center text-muted py-3">当前无符合条件的股票</div>';
+                return;
+            }
+            _surgeData = res.data;
+            container.innerHTML = renderPickCards(res.data.candidates);
+            document.getElementById('tomorrowTradeDate').textContent =
+                '全量扫描 ' + (res.data.total_scanned || 300) + ' 只 | 符合条件 ' + res.data.total_found + ' 只';
+        })
+        .catch(function() {
+            container.innerHTML = '<div class="text-center text-muted py-3">扫描失败</div>';
+        });
+}
+
+function renderPickCards(list) {
+    var html = '';
+    list.forEach(function(p, i) {
+        var predCls = p.predicted_change >= 0 ? 'up' : 'down';
+        var chgCls = p.change_pct >= 0 ? 'up' : 'down';
+        var confCls = p.confidence === '高' ? 'bg-danger' : p.confidence === '中' ? 'bg-warning text-dark' : 'bg-secondary';
+
+        html += '<div class="stock-pick-card">' +
+            '<div class="pick-header">' +
+            '<div class="pick-title">' +
+            '<span class="pick-rank">#' + (i+1) + '</span>' +
+            '<a href="/stock/' + p.code + '" class="pick-code">' + p.code + '</a>' +
+            '<span class="pick-name">' + (p.name || '') + '</span>' +
+            '<span class="badge-' + (p.sector === '创业板' ? 'cy' : p.sector === '科创板' ? 'kc' : p.sector === '北交所' ? 'bj' : p.sector.includes('沪市') ? 'sh' : 'sz') + ' sector-badge">' + p.sector + '</span>' +
+            '<span class="badge ' + confCls + ' confidence-badge">' + (p.confidence || '') + '</span>' +
+            '</div>' +
+            '<div class="' + chgCls + ' day-chg">' + (p.change_pct >= 0 ? '+' : '') + p.change_pct.toFixed(2) + '%</div>' +
+            '</div>' +
+            '<div class="pick-prediction d-flex justify-content-between align-items-center">' +
+            '<div><span class="text-muted" style="font-size:0.8rem;">收盘价 </span><span class="fw-bold" style="font-size:1rem;">' + p.price.toFixed(2) + '</span></div>' +
+            '<div class="text-center"><span class="text-muted" style="font-size:0.8rem;">预估涨幅 </span><span class="' + predCls + ' fw-bold" style="font-size:1.1rem;">' + (p.predicted_change >= 0 ? '+' : '') + p.predicted_change.toFixed(2) + '%</span></div>' +
+            '<div class="text-end"><span class="text-muted" style="font-size:0.8rem;">目标价 </span><span class="fw-bold" style="font-size:1rem;">' + (p.predicted_price ? p.predicted_price.toFixed(2) : '--') + '</span></div>' +
+            '</div>' +
+            (p.summary ? '<div class="pick-summary">' + p.summary + '</div>' : '') +
+            (p.risk_warning ? '<div class="pick-risk">' + p.risk_warning + '</div>' : '') +
+            '</div>';
+    });
+    return html;
+}
+
+function loadTomorrowPicks() {
+    fetch('/api/predict/tomorrow')
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            var container = document.getElementById('tomorrowPicks');
+            if (!res.success) {
+                container.innerHTML = '<div class="text-center text-muted py-3">加载失败</div>';
+                return;
+            }
+            var data = res.data;
+            if (!data.picks || !data.picks.length) {
+                container.innerHTML = '<div class="text-center text-muted py-3">暂无数据</div>';
+                fetch('/api/predict/next')
+                    .then(function(r) { return r.json(); })
+                    .then(function(nr) {
+                        if (!nr.success) return;
+                        var nd = nr.data;
+                        if (nd.status === 'scheduled' && nd.next_pred_time) {
+                            var t = nd.next_pred_time.substring(0, 16).replace('T', ' ');
+                            container.innerHTML = '<div class="text-center py-4">' +
+                                '<div class="mb-2" style="font-size:1.2rem;color:#888;">📡 收集中</div>' +
+                                '<div class="text-muted">正在收集市场信息，预计 <strong>' + t + '</strong> 给出预测数据</div>' +
+                                '<div class="mt-2"><small class="text-muted">下一交易日：' + (nd.next_trading_day || '--') + '</small></div>' +
+                                '</div>';
+                        }
+                    });
+                return;
+            }
+            _picksData = data;
+            document.getElementById('tomorrowTradeDate').textContent =
+                '基于 ' + data.trade_date + ' 数据 | 分析 ' + data.total_analyzed + ' 只';
+
+            document.querySelectorAll('#pickTab .nav-link')[0].textContent = '全部 (' + data.picks.length + ')';
+
+            renderPicks('all');
+        })
+        .catch(function() {
+            document.getElementById('tomorrowPicks').innerHTML =
+                '<div class="text-center text-muted py-3">加载失败</div>';
+        });
+}
+
+function loadWordCloud() {
+    fetch('/api/news/keywords')
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            var el = document.getElementById('wordCloud');
+            if (!res.success || !res.data || !res.data.length) {
+                el.innerHTML = '<div class="text-center text-muted py-2" style="font-size:0.9rem;">暂无热点数据</div>';
+                return;
+            }
+            var kws = res.data;
+            // 按位置递减字体大小：排越前越大
+            var sizes = [1.6, 1.45, 1.3, 1.2, 1.1, 1.0, 0.95, 0.9, 0.85, 0.8];
+            var colors = ['#1a1a2e','#e74c3c','#1565c0','#e65100','#7b1fa2','#2e7d32','#c62828','#00695c','#6a1b9a','#ef6c00'];
+            var html = '<div class="word-cloud">';
+            kws.forEach(function(kw, i) {
+                var idx = i < sizes.length ? i : sizes.length - 1;
+                var fs = sizes[idx] || 0.8;
+                var color = colors[idx % colors.length];
+                html += '<span class="word-item" style="font-size:' + fs + 'rem;color:' + color + ';">' + kw + '</span>';
+            });
+            html += '</div>';
+            el.innerHTML = html;
+        })
+        .catch(function() {
+            document.getElementById('wordCloud').innerHTML =
+                '<div class="text-center text-muted py-2" style="font-size:0.9rem;">加载失败</div>';
+        });
+}
+
 loadAccuracy();
+loadTomorrowPicks();
+loadWordCloud();
 </script>
 {% endblock %}

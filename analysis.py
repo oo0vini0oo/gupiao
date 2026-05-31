@@ -57,8 +57,8 @@ def get_sector_summary(trade_date: str = None) -> list:
         down_count = sum(1 for s in stocks if s["change_pct"] < 0)
         # 龙头股（市值 TOP3）
         leaders = sorted(stocks, key=lambda x: x["market_cap"], reverse=True)[:3]
-        # 涨幅 TOP10
-        top_gainers = sorted(stocks, key=lambda x: x["change_pct"], reverse=True)[:10]
+        # 涨幅 TOP3
+        top_gainers = sorted(stocks, key=lambda x: x["change_pct"], reverse=True)[:3]
 
         result.append({
             "sector": sector_name,
@@ -86,6 +86,7 @@ def get_stock_history(stock_code: str, limit: int = 120) -> list:
         result.append({
             "date": str(r["trade_date"])[:10],
             "price": float(r["latest_price"]) if r["latest_price"] else None,
+            "name": r["stock_name"] or "",
             "open": float(r["open_price"]) if r["open_price"] else None,
             "high": float(r["highest"]) if r["highest"] else None,
             "low": float(r["lowest"]) if r["lowest"] else None,
